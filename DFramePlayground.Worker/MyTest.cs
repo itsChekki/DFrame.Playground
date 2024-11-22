@@ -25,14 +25,14 @@ public class MyTest : Workload
         _logger.LogInformation("MyTest was called");
         if (_random.Next(100) % 2 == 0)
             throw new TimeoutException("Took to long to get a response");
-        
+
         return Task.CompletedTask;
     }
 }
 
-public class MyTest2 : Workload, IReportingObserver 
+public class MyTest2 : Workload, IReportingObserver
 {
-    private readonly ILogger<MyTest2> _logger; 
+    private readonly ILogger<MyTest2> _logger;
     private readonly IClusterClient _grainFactory;
     private SemaphoreSlim _semaphore;
     private QueueEvent _message;
@@ -46,33 +46,32 @@ public class MyTest2 : Workload, IReportingObserver
         _semaphore = new SemaphoreSlim(0, 1);
     }
 
-    public override Task SetupAsync(WorkloadContext context)
+    public override async Task SetupAsync(WorkloadContext context)
     {
         Id = $"{context.WorkloadIndex}{context.ExecuteCount}";
         _logger.LogInformation($"Calculated is {Id}");
-        return Task.CompletedTask;
+        var grain = _grainFactory.GetGrain<IBackchannelReportingGrain>(Id);
+        var reference = _grainFactory.CreateObjectReference<IReportingObserver>(this);
+        await grain.Subscribe(reference);
     }
 
     public override async Task ExecuteAsync(WorkloadContext context)
     {
         _logger.LogInformation($"MyTest2 was called with id {Id}");
-        var grain = _grainFactory.GetGrain<IBackchannelReportingGrain>(Id);
-        var reference = _grainFactory.CreateObjectReference<IReportingObserver>(this);
-        await grain.Subscribe(reference);
-
+        
         _message = new QueueEvent()
         {
             Id = Id,
             Text = "Hello World!",
             Language = "English",
         };
-        
+
         var publishPost = await "http://localhost:5222/"
             .AppendPathSegment("publish")
             .AppendPathSegment("PublishToRedis")
             .AppendPathSegment(Id)
             .PostJsonAsync(_message);
-        
+
         publishPost.StatusCode.Should().Be(200);
         await _semaphore.WaitAsync(TimeSpan.FromSeconds(4));
 
