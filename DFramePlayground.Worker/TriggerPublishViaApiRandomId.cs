@@ -4,20 +4,20 @@ using DFramePlayground.Shared;
 using FluentAssertions;
 using Flurl;
 using Flurl.Http;
-using Microsoft.Extensions.Logging;
 using Orleans;
 
 namespace DFramePlayground.Worker;
 
-public class TriggerPublishViaApi : Workload, IReportingObserver
+public class TriggerPublishViaApiRandomId : Workload, IReportingObserver
 {
     private readonly IClusterClient _clusterClient;
     private readonly SemaphoreSlim _semaphore;
     private readonly QueueEvent _message;
+    private readonly bool _randomId;
     private bool _received;
     private readonly string _id;
 
-    public TriggerPublishViaApi(IClusterClient clusterClient)
+    public TriggerPublishViaApiRandomId(IClusterClient clusterClient)
     {
         _clusterClient = clusterClient;
         _id = Guid.NewGuid().ToString();
