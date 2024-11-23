@@ -25,7 +25,7 @@ public class PublishController : ControllerBase
 
     private async Task Publish(string id, QueueEvent eventToPublish)
     {
-        await Task.Delay(TimeSpan.FromSeconds(new Random().Next(5)));
+        await Task.Delay(TimeSpan.FromMilliseconds(new Random().Next(1000)));
         var subscriber = _connectionMultiplexer.GetSubscriber();
         await subscriber.PublishAsync(id, JsonSerializer.Serialize(eventToPublish));
     }

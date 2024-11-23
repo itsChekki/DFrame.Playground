@@ -20,6 +20,7 @@ public class ReportingObserver : IReportingObserver
 public interface IBackchannelReportingGrain : IGrainWithStringKey
 {
     Task Subscribe(IReportingObserver observer);
+    Task Unsubscribe(IReportingObserver observer);
 }
 
 public class BackchannelReportingGrain(IConnectionMultiplexer connectionMultiplexer) : Grain, IBackchannelReportingGrain
@@ -31,5 +32,11 @@ public class BackchannelReportingGrain(IConnectionMultiplexer connectionMultiple
         var sub = connectionMultiplexer.GetSubscriber();
         await sub.SubscribeAsync(this.GetPrimaryKeyString(), (_, value) =>  _observers.ForEach(toReport => toReport.ReportProgress(JsonSerializer.Deserialize<QueueEvent>(value!)!)));
         _observers.Add(observer);
+    }
+
+    public Task Unsubscribe(IReportingObserver observer)
+    {
+        _observers.Remove(observer);
+        return Task.CompletedTask;
     }
 }

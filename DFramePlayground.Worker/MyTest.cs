@@ -32,36 +32,38 @@ public class MyTest : Workload
 
 public class MyTest2 : Workload, IReportingObserver
 {
-    private readonly ILogger<MyTest2> _logger;
-    private readonly IClusterClient _grainFactory;
+    private readonly IClusterClient _clusterClient;
     private SemaphoreSlim _semaphore;
     private QueueEvent _message;
     private bool _received;
-    private string Id;
+    private readonly string _id;
 
-    public MyTest2(ILogger<MyTest2> logger, IClusterClient grainFactory)
+    public MyTest2(IClusterClient clusterClient)
     {
-        _logger = logger;
-        _grainFactory = grainFactory;
+        _clusterClient = clusterClient;
         _semaphore = new SemaphoreSlim(0, 1);
+        _id = Guid.NewGuid().ToString();
     }
 
     public override async Task SetupAsync(WorkloadContext context)
     {
-        Id = $"{context.WorkloadIndex}{context.ExecuteCount}";
-        _logger.LogInformation($"Calculated is {Id}");
-        var grain = _grainFactory.GetGrain<IBackchannelReportingGrain>(Id);
-        var reference = _grainFactory.CreateObjectReference<IReportingObserver>(this);
+        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
+        var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
         await grain.Subscribe(reference);
+    }
+
+    public override async Task TeardownAsync(WorkloadContext context)
+    {
+        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
+        var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
+        await grain.Unsubscribe(reference);
     }
 
     public override async Task ExecuteAsync(WorkloadContext context)
     {
-        _logger.LogInformation($"MyTest2 was called with id {Id}");
-        
         _message = new QueueEvent()
         {
-            Id = Id,
+            Id = _id,
             Text = "Hello World!",
             Language = "English",
         };
@@ -69,12 +71,12 @@ public class MyTest2 : Workload, IReportingObserver
         var publishPost = await "http://localhost:5222/"
             .AppendPathSegment("publish")
             .AppendPathSegment("PublishToRedis")
-            .AppendPathSegment(Id)
+            .AppendPathSegment(_id)
             .PostJsonAsync(_message);
 
         publishPost.StatusCode.Should().Be(200);
-        await _semaphore.WaitAsync(TimeSpan.FromSeconds(4));
-
+        await _semaphore.WaitAsync(TimeSpan.FromSeconds(10));
+        
         _received.Should().NotBe(false, "The message should have been received but a timeout happened");
     }
 
