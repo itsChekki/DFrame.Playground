@@ -9,40 +9,25 @@ using Orleans;
 
 namespace DFramePlayground.Worker;
 
-public class MyTest : Workload
-{
-    private readonly ILogger<MyTest> _logger;
-    private readonly Random _random;
-
-    public MyTest(ILogger<MyTest> logger)
-    {
-        _logger = logger;
-        _random = new Random();
-    }
-
-    public override Task ExecuteAsync(WorkloadContext context)
-    {
-        _logger.LogInformation("MyTest was called");
-        if (_random.Next(100) % 2 == 0)
-            throw new TimeoutException("Took to long to get a response");
-
-        return Task.CompletedTask;
-    }
-}
-
-public class MyTest2 : Workload, IReportingObserver
+public class TriggerPublishViaApi : Workload, IReportingObserver
 {
     private readonly IClusterClient _clusterClient;
-    private SemaphoreSlim _semaphore;
-    private QueueEvent _message;
+    private readonly SemaphoreSlim _semaphore;
+    private readonly QueueEvent _message;
     private bool _received;
     private readonly string _id;
 
-    public MyTest2(IClusterClient clusterClient)
+    public TriggerPublishViaApi(IClusterClient clusterClient)
     {
         _clusterClient = clusterClient;
-        _semaphore = new SemaphoreSlim(0, 1);
         _id = Guid.NewGuid().ToString();
+        _message = new QueueEvent()
+        {
+            Id = _id,
+            Text = "Hello World!",
+            Language = "English",
+        };
+        _semaphore = new SemaphoreSlim(0, 1);
     }
 
     public override async Task SetupAsync(WorkloadContext context)
@@ -61,13 +46,6 @@ public class MyTest2 : Workload, IReportingObserver
 
     public override async Task ExecuteAsync(WorkloadContext context)
     {
-        _message = new QueueEvent()
-        {
-            Id = _id,
-            Text = "Hello World!",
-            Language = "English",
-        };
-
         var publishPost = await "http://localhost:5222/"
             .AppendPathSegment("publish")
             .AppendPathSegment("PublishToRedis")
