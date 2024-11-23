@@ -44,6 +44,12 @@ public class TriggerPublishViaApi : Workload, IReportingObserver
         await grain.Unsubscribe(reference);
     }
 
+    public override Dictionary<string, string>? Complete(WorkloadContext context)
+    {
+        Console.WriteLine("Complete reached");
+        return base.Complete(context);
+    }
+
     public override async Task ExecuteAsync(WorkloadContext context)
     {
         var publishPost = await "http://localhost:5222/"
