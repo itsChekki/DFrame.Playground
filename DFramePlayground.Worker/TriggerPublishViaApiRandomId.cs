@@ -12,34 +12,31 @@ public class TriggerPublishViaApiRandomId : Workload, IReportingObserver
 {
     private readonly IClusterClient _clusterClient;
     private readonly SemaphoreSlim _semaphore;
-    private readonly QueueEvent _message;
-    private readonly bool _randomId;
+    private QueueEvent? _message;
     private bool _received;
-    private readonly string _id;
 
     public TriggerPublishViaApiRandomId(IClusterClient clusterClient)
     {
         _clusterClient = clusterClient;
-        _id = Guid.NewGuid().ToString();
-        _message = new QueueEvent()
-        {
-            Id = _id,
-            Text = "Hello World!",
-            Language = "English",
-        };
         _semaphore = new SemaphoreSlim(0, 1);
     }
 
     public override async Task SetupAsync(WorkloadContext context)
     {
-        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
+        _message = new QueueEvent()
+        {
+            Id = context.WorkloadId.ToString(),
+            Text = "Hello World!",
+            Language = "English",
+        };
+        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(context.WorkloadId.ToString());
         var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
         await grain.Subscribe(reference);
     }
 
     public override async Task TeardownAsync(WorkloadContext context)
     {
-        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
+        var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(context.WorkloadId.ToString());
         var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
         await grain.Unsubscribe(reference);
     }
@@ -55,7 +52,7 @@ public class TriggerPublishViaApiRandomId : Workload, IReportingObserver
         var publishPost = await "http://localhost:5222/"
             .AppendPathSegment("publish")
             .AppendPathSegment("PublishToRedis")
-            .AppendPathSegment(_id)
+            .AppendPathSegment(context.WorkloadId.ToString())
             .PostJsonAsync(_message);
 
         publishPost.StatusCode.Should().Be(200);
@@ -70,9 +67,4 @@ public class TriggerPublishViaApiRandomId : Workload, IReportingObserver
         _received = true;
         _semaphore.Release();
     }
-}
-
-public class MyTestSettings
-{
-    public int Delay { get; set; }
 }
