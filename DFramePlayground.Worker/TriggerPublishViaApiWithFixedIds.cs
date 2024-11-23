@@ -12,6 +12,9 @@ public class TriggerPublishViaApiWithFixedIds : Workload, IReportingObserver
 {
     private readonly IClusterClient _clusterClient;
     private readonly SemaphoreSlim _semaphore;
+    private readonly Dictionary<string, string> _report;
+    private IReportingObserver? _observerReference;
+    
     private QueueEvent? _message;
     private bool _received;
     private string? _id;
@@ -20,6 +23,8 @@ public class TriggerPublishViaApiWithFixedIds : Workload, IReportingObserver
     {
         _clusterClient = clusterClient;
         _semaphore = new SemaphoreSlim(0, 1);
+        _observerReference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
+        _report = new Dictionary<string, string>();
     }
 
     public override async Task SetupAsync(WorkloadContext context)
@@ -28,8 +33,7 @@ public class TriggerPublishViaApiWithFixedIds : Workload, IReportingObserver
         _id = await idGrain.GetId();
         
         var subGrain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
-        var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
-        await subGrain.Subscribe(reference);
+        await subGrain.Subscribe(_observerReference!);
         
         _message = new QueueEvent()
         {
@@ -42,18 +46,17 @@ public class TriggerPublishViaApiWithFixedIds : Workload, IReportingObserver
     public override async Task TeardownAsync(WorkloadContext context)
     {
         var grain = _clusterClient.GetGrain<IBackchannelReportingGrain>(_id);
-        var reference = _clusterClient.CreateObjectReference<IReportingObserver>(this);
-        await grain.Unsubscribe(reference);
+        await grain.Unsubscribe(_observerReference!);
+        
+        var idGrain = _clusterClient.GetGrain<IIdGeneratorGrain>(context.WorkloadIndex % 10);
+        await idGrain.FreeId(_id!);
     }
 
     public override Dictionary<string, string>? Complete(WorkloadContext context)
     {
         Console.WriteLine("Complete reached");
 
-        return new Dictionary<string, string>()
-        {
-            ["id"] = _id,
-        };
+        return _report;
     }
 
     public override async Task ExecuteAsync(WorkloadContext context)
@@ -67,6 +70,7 @@ public class TriggerPublishViaApiWithFixedIds : Workload, IReportingObserver
         publishPost.StatusCode.Should().Be(200);
         await _semaphore.WaitAsync(TimeSpan.FromSeconds(10));
         
+        _report.Add("QueueEventId"+context.ExecuteCount, _id!);
         _received.Should().NotBe(false, "The message should have been received but a timeout happened");
     }
 
